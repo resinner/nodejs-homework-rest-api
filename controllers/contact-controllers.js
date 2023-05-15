@@ -26,7 +26,7 @@ const getContactById = async (req, res, next) => {
     const { id } = req.params;
     const result = await contactsService.getContactById(id);
     if (!result) {
-      throw HttpError(404, `Not found`);
+      throw HttpError(404, `Not Found`);
     }
     res.json(result);
   } catch (error) {
@@ -81,7 +81,6 @@ const updateContact = async (req, res, next) => {
     next(error);
   }
 };
-
 
 module.exports = {
   getAllContacts,

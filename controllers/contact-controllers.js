@@ -1,7 +1,6 @@
 const Joi = require("joi");
 
 const contactsService = require("../models/contacts");
-
 const HttpError = require("../helpers/httpError");
 
 const contactsAddSchema = Joi.object({
@@ -20,7 +19,6 @@ const getAllContacts = async (req, res, next) => {
   }
 };
 
-
 const getContactById = async (req, res, next) => {
   try {
     const { id } = req.params;
@@ -34,7 +32,6 @@ const getContactById = async (req, res, next) => {
   }
 };
 
-
 const addContact = async (req, res, next) => {
   try {
     const { error } = contactsAddSchema.validate(req.body);
@@ -47,7 +44,6 @@ const addContact = async (req, res, next) => {
     next(error);
   }
 };
-
 
 const deleteContact = async (req, res, next) => {
   try {
@@ -63,7 +59,6 @@ const deleteContact = async (req, res, next) => {
     next(error);
   }
 };
-
 
 const updateContact = async (req, res, next) => {
   try {

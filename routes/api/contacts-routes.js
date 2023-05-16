@@ -4,6 +4,7 @@ const router = express.Router();
 
 const contactsControllers = require("../../controllers/contact-controllers")
 
+
 router.get("/", contactsControllers.getAllContacts);
 
 router.get("/:id", contactsControllers.getContactById);

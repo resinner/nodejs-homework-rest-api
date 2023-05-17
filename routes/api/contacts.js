@@ -1,10 +1,10 @@
 const express = require('express')
-const contact = require("../../models/contacts")
+const contacts = require("../../models/contacts")
 
 const router = express.Router()
 
 router.get('/', async (req, res, next) => {
-  const result = await contact.listContacts();
+  const result = await contacts.listContacts();
   res.json(result)
 })
 

@@ -3,16 +3,17 @@ const jwt = require("jsonwebtoken");
 const gravatar = require("gravatar");
 const path = require("path");
 const fs = require("fs/promises");
+const { nanoid } = require("nanoid");
 
 const { User } = require("../models/user");
 
 const HttpError = require("../helpers/httpError");
 const ctrlWrapper = require("../helpers/ctrlWrapper");
+const sendEmail = require("../helpers/sendEmail");
 
-const { SECRET_KEY } = process.env;
+const { SECRET_KEY, PROJECT_URL } = process.env;
 
 const Jimp = require("jimp");
-
 
 const register = async (req, res) => {
   const { email, password } = req.body;
@@ -24,23 +25,77 @@ const register = async (req, res) => {
 
   const hashPassword = await bcrypt.hash(password, 10);
   const avatarURL = gravatar.url(email);
+  const verificationCode = nanoid();
 
-  const newUser = await User.create({
-    ...req.body,
-    password: hashPassword,
-    avatarURL
-  });
+  const newUser = await User.create({...req.body, password: hashPassword, avatarURL, verificationCode});
 
-  res.json({
+  const verifyEmail = {
+    to: email,
+    subject: "Verify email",
+    html: `<a target="_blank" href="${PROJECT_URL}/api/auth/verify/${verificationCode}">Click to verify email</a>`,
+  };
+
+  await sendEmail(verifyEmail);
+
+  const { _id: id } = newUser;
+
+  const payload = {
+    id,
+  };
+
+  const token = jwt.sign(payload, SECRET_KEY, { expiresIn: "23h" });
+
+
+  res.status(200).json({
+    token,
     email: newUser.email,
     subscription: newUser.subscription,
+  });
+};
+
+const verify = async (req, res) => {
+  const { verificationCode } = req.params;
+  const user = await User.findOne({ verificationCode });
+  if (!user) {
+    throw HttpError(404);
+  }
+  await User.findByIdAndUpdate(user._id, {
+    verify: true,
+    verificationCode: "",
+  });
+
+  res.status(200).json({
+    message: "Verify success",
+  });
+};
+
+const resendVerifyEmail = async (req, res) => {
+  const { email } = req.body;
+  const user = await User.findOne({ email });
+  if (!user) {
+    throw HttpError(404);
+  }
+  if (user.verify) {
+    throw HttpError(400, "Verification has already been passed");
+  }
+
+  const verifyEmail = {
+    to: email,
+    subject: "Verify email",
+    html: `<a target="_blank" href="${PROJECT_URL}/api/auth/verify/${user.verificationCode}">Click to verify email</a>`,
+  };
+
+  await sendEmail(verifyEmail);
+
+  res.json({
+    message: "Verify email send",
   });
 };
 
 const login = async (req, res) => {
   const { email, password } = req.body;
   const user = await User.findOne({ email });
-  if (!user) {
+  if (!user || !user.verify) {
     throw HttpError(401, "Email or password is wrong");
   }
   const passwordCompare = await bcrypt.compare(password, user.password);
@@ -48,65 +103,77 @@ const login = async (req, res) => {
     throw HttpError(401, "Email or password is wrong");
   }
 
-  const payload = {
-    id: user._id,
-  }
+    const { _id: id } = user;
 
-  const token = jwt.sign(payload, SECRET_KEY, {expiresIn: "23h"});
+    const payload = {
+      id,
+    };
+
+  const token = jwt.sign(payload, SECRET_KEY, { expiresIn: "23h" });
   await User.findByIdAndUpdate(user._id, { token });
 
   res.json({
     token,
-  })
-}
+    user: {
+      name: user.name,
+      email: user.email,
+    },
+  });
+};
 
 const getCurrent = async (req, res) => {
-  const { email, subscription } = req.user;
+  const { token, email, subscription } = req.user;
 
   res.json({
-    email,
-    subscription,
+    token,
+    user: {  
+      email,
+      subscription,
+    }
   });
 };
 
 const logout = async (req, res) => {
   const { _id } = req.user;
-  await User.findByIdAndUpdate(_id, {token: "" });
+  await User.findByIdAndUpdate(_id, { token: "" });
 
   res.json({
-    message: "Logout success"
-  })
-}
+    message: "Logout success",
+  });
+};
 
 const updateUserSubscription = async (req, res) => {
   const { _id } = req.user;
   const { subscription } = req.body;
   const result = await User.findByIdAndUpdate(_id, req.body, { new: true });
-  
- if (!result) {
-   throw HttpError(404, `Not found`);
+
+  if (!result) {
+    throw HttpError(404, `Not found`);
   }
   if (
-    (subscription !== "starter" && subscription !== "pro") && subscription !== "business") {
+    subscription !== "starter" &&
+    subscription !== "pro" &&
+    subscription !== "business"
+  ) {
     throw HttpError(400, `Bad Request`);
   }
   res.json(result);
-}
+};
 
 const updateAvatar = async (req, res) => {
   const { _id } = req.user;
   const { path: tempUpload, originalname } = req.file;
 
-const avatarsTemp = path.join(__dirname, "../", "temp", originalname);
-const avatarsDir = path.join(__dirname, "../", "public", "avatars");
+  const avatarsTemp = path.join(__dirname, "../", "temp", originalname);
+  const avatarsDir = path.join(__dirname, "../", "public", "avatars");
 
-await Jimp.read(avatarsTemp)
-  .then((image) => {
-    return image.resize(250, 250).write(avatarsTemp);
-  })
-  .catch((err) => {
-    console.error(err);
-  });
+  await Jimp.read(avatarsTemp)
+    .then((image) => {
+      return image.resize(250, 250).write(avatarsTemp);
+    })
+    .catch((err) => {
+      console.error(err);
+    });
 
   const filename = `${_id}_${originalname}`;
 
@@ -120,10 +187,12 @@ await Jimp.read(avatarsTemp)
   res.json({
     avatarURL,
   });
-}
+};
 
 module.exports = {
   register: ctrlWrapper(register),
+  verify: ctrlWrapper(verify),
+  resendVerifyEmail: ctrlWrapper(resendVerifyEmail),
   login: ctrlWrapper(login),
   getCurrent: ctrlWrapper(getCurrent),
   logout: ctrlWrapper(logout),

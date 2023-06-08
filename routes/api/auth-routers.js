@@ -15,6 +15,10 @@ const router = express.Router();
 // singup
 router.post("/register", validateBody(schemas.registerSchema), ctrl.register);
 
+router.get("/verify/:verificationCode", ctrl.verify);
+
+router.post("/verify", validateBody(schemas.emailSchema), ctrl.resendVerifyEmail);
+
 // singin
 router.post("/login", validateBody(schemas.loginSchema), ctrl.login);
 
